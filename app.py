@@ -163,9 +163,9 @@ def add_chat_message(sender, content, agent_mentioned=None):
         AGENTS_DATA[agent_mentioned]["messages_processed"] += 1
 
 if __name__ == '__main__':
-    print("🚀 TangyuanAT Agent Team Monitor Starting...")
-    print("📊 Dashboard: http://localhost:5000")
-    print("👥 Agents: 昔涟(Xilian) & 汤圆(Tangyuan)")
+    print("TangyuanAT Agent Team Monitor Starting...")
+    print("Dashboard: http://localhost:5000")
+    print("Agents: Xilian & Tangyuan")
     
     # 添加启动日志
     add_log("xilian", "系统启动", "TangyuanAT 监控平台初始化完成")

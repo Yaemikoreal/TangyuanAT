@@ -11,6 +11,7 @@ import json
 import os
 import threading
 import time
+import psutil  # 系统资源监控
 
 # 导入数据库模型
 from models import db, Agent, WorkLog, ChatHistory, StatRecord, Config, Alert, AlertRule, AlertNotification, init_db
@@ -578,6 +579,293 @@ def get_alert_history():
             "success": True,
             "data": [a.to_dict() for a in alerts],
             "count": len(alerts)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============ 系统监控 API ============
+
+@app.route('/api/monitoring/health')
+def get_system_health():
+    """获取系统整体健康状态"""
+    try:
+        # 数据库连接检查
+        db_status = "healthy"
+        db_message = "Connected"
+        try:
+            # 执行简单查询测试连接
+            db.session.execute(db.text('SELECT 1'))
+        except Exception as e:
+            db_status = "unhealthy"
+            db_message = str(e)
+        
+        # OpenClaw 网关检查
+        openclaw_status = openclaw.get_status()
+        gateway_status = "healthy" if openclaw_status.get('success') else "unhealthy"
+        
+        # 系统资源
+        cpu_percent = psutil.cpu_percent(interval=1)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        
+        # 计算整体健康分数
+        health_score = 100
+        if db_status == "unhealthy":
+            health_score -= 30
+        if gateway_status == "unhealthy":
+            health_score -= 20
+        if cpu_percent > 80:
+            health_score -= 15
+        if memory.percent > 80:
+            health_score -= 15
+        if disk.percent > 90:
+            health_score -= 10
+        
+        health_score = max(0, health_score)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "status": "healthy" if health_score >= 70 else "degraded" if health_score >= 40 else "unhealthy",
+                "score": health_score,
+                "components": {
+                    "database": {
+                        "status": db_status,
+                        "message": db_message,
+                        "type": "sqlite"
+                    },
+                    "gateway": {
+                        "status": gateway_status,
+                        "message": "OpenClaw gateway " + ("connected" if gateway_status == "healthy" else "disconnected"),
+                        "url": openclaw_status.get('url', 'N/A')
+                    }
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/monitoring/database')
+def get_database_status():
+    """获取数据库连接状态"""
+    try:
+        # 测试连接
+        start_time = time.time()
+        db.session.execute(db.text('SELECT 1'))
+        latency = (time.time() - start_time) * 1000  # ms
+        
+        # 获取数据库信息
+        db_size = os.path.getsize(DATABASE_PATH) if os.path.exists(DATABASE_PATH) else 0
+        
+        # 获取表统计
+        agent_count = Agent.query.count()
+        log_count = WorkLog.query.count()
+        chat_count = ChatHistory.query.count()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "status": "connected",
+                "type": "SQLite",
+                "path": DATABASE_PATH,
+                "size_bytes": db_size,
+                "size_human": f"{db_size / 1024:.1f} KB",
+                "latency_ms": round(latency, 2),
+                "tables": {
+                    "agents": agent_count,
+                    "work_logs": log_count,
+                    "chat_history": chat_count
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "data": {
+                "status": "disconnected",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        })
+
+
+@app.route('/api/monitoring/gateway')
+def get_gateway_status():
+    """获取 OpenClaw 网关状态"""
+    try:
+        status = openclaw.get_status()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "status": "connected" if status.get('success') else "disconnected",
+                "url": status.get('url', 'N/A'),
+                "version": status.get('version', 'N/A'),
+                "uptime": status.get('uptime', 'N/A'),
+                "sessions": status.get('sessions', 0),
+                "timestamp": datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "data": {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        })
+
+
+@app.route('/api/monitoring/resources')
+def get_system_resources():
+    """获取系统资源使用情况"""
+    try:
+        # CPU
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_count = psutil.cpu_count()
+        cpu_freq = psutil.cpu_freq()
+        
+        # 内存
+        memory = psutil.virtual_memory()
+        
+        # 磁盘
+        disk = psutil.disk_usage('/')
+        
+        # 网络 (可选)
+        try:
+            net_io = psutil.net_io_counters()
+            network = {
+                "bytes_sent": net_io.bytes_sent,
+                "bytes_recv": net_io.bytes_recv,
+                "packets_sent": net_io.packets_sent,
+                "packets_recv": net_io.packets_recv
+            }
+        except:
+            network = None
+        
+        # 进程信息
+        process = psutil.Process()
+        process_memory = process.memory_info()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "cpu": {
+                    "percent": cpu_percent,
+                    "count": cpu_count,
+                    "freq_mhz": cpu_freq.current if cpu_freq else None
+                },
+                "memory": {
+                    "total_gb": round(memory.total / (1024**3), 2),
+                    "available_gb": round(memory.available / (1024**3), 2),
+                    "used_gb": round(memory.used / (1024**3), 2),
+                    "percent": memory.percent
+                },
+                "disk": {
+                    "total_gb": round(disk.total / (1024**3), 2),
+                    "used_gb": round(disk.used / (1024**3), 2),
+                    "free_gb": round(disk.free / (1024**3), 2),
+                    "percent": disk.percent
+                },
+                "network": network,
+                "process": {
+                    "memory_mb": round(process_memory.rss / (1024**2), 2),
+                    "cpu_percent": process.cpu_percent()
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/monitoring/resources/history')
+def get_resource_history():
+    """获取资源使用历史 (最近 N 个数据点)"""
+    try:
+        limit = request.args.get('limit', 60, type=int)  # 默认最近60个点
+        
+        # 从 StatRecord 获取历史数据
+        today = datetime.utcnow().date()
+        records = StatRecord.query.order_by(StatRecord.date.desc()).limit(limit).all()
+        
+        history = [{
+            "date": r.date.isoformat(),
+            "tasks": r.total_tasks,
+            "messages": r.total_messages
+        } for r in records]
+        
+        return jsonify({
+            "success": True,
+            "data": history[::-1]  # 按时间正序
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/monitoring/logs/errors')
+def get_error_logs():
+    """获取错误日志"""
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        
+        # 查找包含错误关键词的日志
+        error_keywords = ['error', 'fail', 'exception', '错误', '失败']
+        logs = WorkLog.query.filter(
+            db.or_(*[WorkLog.details.ilike(f'%{kw}%') for kw in error_keywords])
+        ).order_by(WorkLog.timestamp.desc()).limit(limit).all()
+        
+        return jsonify({
+            "success": True,
+            "data": [log.to_dict() for log in logs],
+            "count": len(logs)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/monitoring/logs/aggregate')
+def get_log_aggregation():
+    """获取日志聚合统计"""
+    try:
+        from sqlalchemy import func
+        
+        # 按动作类型聚合
+        action_stats = db.session.query(
+            WorkLog.action,
+            func.count(WorkLog.id).label('count')
+        ).group_by(WorkLog.action).all()
+        
+        # 按 Agent 聚合
+        agent_stats = db.session.query(
+            WorkLog.agent_name,
+            func.count(WorkLog.id).label('count')
+        ).group_by(WorkLog.agent_name).all()
+        
+        # 按日期聚合 (最近7天)
+        from datetime import timedelta
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        daily_stats = db.session.query(
+            func.date(WorkLog.timestamp).label('date'),
+            func.count(WorkLog.id).label('count')
+        ).filter(
+            WorkLog.timestamp >= seven_days_ago
+        ).group_by(
+            func.date(WorkLog.timestamp)
+        ).all()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "by_action": [{"action": a, "count": c} for a, c in action_stats],
+                "by_agent": [{"agent": a, "count": c} for a, c in agent_stats],
+                "by_day": [{"date": str(d), "count": c} for d, c in daily_stats]
+            }
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

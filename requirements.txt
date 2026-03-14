@@ -8,6 +8,9 @@ flask-sqlalchemy>=3.0.0
 # HTTP requests
 requests>=2.31.0
 
+# System monitoring
+psutil>=5.9.0
+
 # WebSocket support (optional, for future)
 # flask-socketio>=5.3.0
 

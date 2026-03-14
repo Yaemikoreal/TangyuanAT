@@ -37,8 +37,9 @@ open http://localhost:5000
 
 | Agent | 角色 | 模型 | 特点 |
 |-------|------|------|------|
-| 昔涟 (Xilian) | 主控/开发 | kimi-k2.5 | 严谨工程师，双模式切换 |
-| 汤圆 (Tangyuan) | 辅助/执行 | glm-5 | 活泼狸花猫，代码累了会蹭人 |
+| 昔涟 (Xilian) | 主控/开发 | kimi-k2.5 | 严谨工程师，双模式切换，任务分配 |
+| 汤圆 (Tangyuan) | 辅助/执行 | glm-5 | 活泼狸花猫，前端开发，代码累了会蹭人 |
+| 豆腐 (Doufu) | 测试/运维 | glm-5 | 稳重可靠，专注测试和部署 |
 
 ## 项目结构
 
@@ -112,4 +113,4 @@ TangyuanAT/
 - [ ] 统计图表
 
 ---
-*Created by 昔涟 & 汤圆 | OpenClaw Agent Team*
+*Created by 昔涟 & 汤圆 & 豆腐 | OpenClaw Agent Team*

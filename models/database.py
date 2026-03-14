@@ -185,7 +185,8 @@ def init_default_agents():
                 '文件与数据处理',
                 'Web 搜索与 API 调用',
                 '飞书集成',
-                'Git 版本控制'
+                'Git 版本控制',
+                '任务分配与验收'
             ]
         },
         {
@@ -202,7 +203,26 @@ def init_default_agents():
                 '任务执行',
                 '数据分析',
                 '文档整理',
+                '前端开发',
                 '冻干爱好者'
+            ]
+        },
+        {
+            'id': 'doufu',
+            'name': '豆腐',
+            'english_name': 'Doufu',
+            'status': 'offline',
+            'model': 'glm-5',
+            'role': '测试/运维工程师',
+            'character': '稳重可靠，专注于测试和部署',
+            'emoji': '🟦',
+            'skills': [
+                '测试用例编写',
+                'CI/CD 配置',
+                'Docker 部署',
+                '日志分析',
+                '系统监控',
+                '文档维护'
             ]
         }
     ]

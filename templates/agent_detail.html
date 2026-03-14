@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 详情 - TangyuanAT</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .header {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px 40px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .back-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        .agent-header {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .agent-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+        }
+        .agent-info h2 { font-size: 28px; margin-bottom: 8px; }
+        .agent-info p { color: #666; margin-bottom: 12px; }
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .status-online { background: #d4edda; color: #155724; }
+        .status-offline { background: #f8d7da; color: #721c24; }
+        .status-busy { background: #fff3cd; color: #856404; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+        }
+        .card {
+            background: rgba(255,255,255,0.95);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .card h3 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #667eea;
+        }
+        .skill-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .skill-tag {
+            padding: 6px 12px;
+            background: #f0f0f0;
+            border-radius: 16px;
+            font-size: 13px;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .config-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .form-group label { font-size: 14px; color: #666; }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .btn-primary {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .log-list { max-height: 300px; overflow-y: auto; }
+        .log-item { padding: 12px; border-bottom: 1px solid #eee; }
+        .log-time { font-size: 12px; color: #999; }
+        .empty-state { text-align: center; padding: 40px; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Agent 详情</h1>
+        <a href="/" class="back-btn">返回仪表盘</a>
+    </div>
+    <div class="container">
+        <div class="agent-header">
+            <div class="agent-avatar" id="avatar">🌀</div>
+            <div class="agent-info">
+                <h2 id="name">加载中...</h2>
+                <p id="role">加载中...</p>
+                <span class="status-badge status-offline" id="status">离线</span>
+            </div>
+        </div>
+        <div class="grid">
+            <div class="card">
+                <h3>技能列表</h3>
+                <div class="skill-list" id="skills"><div class="empty-state">加载中...</div></div>
+            </div>
+            <div class="card">
+                <h3>性能统计</h3>
+                <div class="stat-row"><span>完成任务数</span><strong id="tasks">0</strong></div>
+                <div class="stat-row"><span>处理消息数</span><strong id="messages">0</strong></div>
+                <div class="stat-row"><span>最后活跃</span><strong id="lastActive">-</strong></div>
+                <div class="stat-row"><span>当前模型</span><strong id="model">-</strong></div>
+            </div>
+            <div class="card">
+                <h3>配置管理</h3>
+                <form class="config-form" id="configForm">
+                    <div class="form-group">
+                        <label>模型</label>
+                        <select id="modelSelect">
+                            <option value="kimi-k2.5">kimi-k2.5</option>
+                            <option value="glm-5">glm-5</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary">保存配置</button>
+                </form>
+            </div>
+            <div class="card">
+                <h3>最近日志</h3>
+                <div class="log-list" id="logs"><div class="empty-state">暂无日志</div></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const agentId = new URLSearchParams(window.location.search).get('id') || 'xilian';
+        async function loadAgent() {
+            const res = await fetch(`/api/agents/${agentId}`);
+            const data = await res.json();
+            if (data.success) {
+                const a = data.data;
+                document.getElementById('name').textContent = a.name;
+                document.getElementById('role').textContent = a.role;
+                document.getElementById('avatar').textContent = a.emoji || '🌀';
+                document.getElementById('status').textContent = a.status === 'online' ? '在线' : '离线';
+                document.getElementById('status').className = `status-badge status-${a.status}`;
+                document.getElementById('tasks').textContent = a.tasks_completed || 0;
+                document.getElementById('messages').textContent = a.messages_processed || 0;
+                document.getElementById('lastActive').textContent = a.last_active ? new Date(a.last_active).toLocaleString() : '-';
+                document.getElementById('model').textContent = a.model || '-';
+                if (a.skills && a.skills.length > 0) {

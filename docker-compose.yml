@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  tangyuanat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/yaemikoreal/tangyuanat:latest
+    container_name: tangyuanat
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - tangyuanat_data:/app/data
+      - ./data:/app/data
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+      - PYTHONUNBUFFERED=1
+      # 告警配置
+      - ALERT_OFFLINE_THRESHOLD=${ALERT_OFFLINE_THRESHOLD:-5}
+      - ALERT_RESPONSE_TIME_THRESHOLD=${ALERT_RESPONSE_TIME_THRESHOLD:-30000}
+      - ALERT_COOLDOWN_MINUTES=${ALERT_COOLDOWN_MINUTES:-5}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL:-}
+      - ALERT_ENABLE_FEISHU=${ALERT_ENABLE_FEISHU:-true}
+      - ALERT_ENABLE_FRONTEND=${ALERT_ENABLE_FRONTEND:-true}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - tangyuanat_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 可选: Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: tangyuanat_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - tangyuanat
+    networks:
+      - tangyuanat_network
+    profiles:
+      - production
+
+  # 可选: Prometheus 监控
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: tangyuanat_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - tangyuanat_network
+    profiles:
+      - monitoring
+
+  # 可选: Grafana 可视化
+  grafana:
+    image: grafana/grafana:latest
+    container_name: tangyuanat_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    depends_on:
+      - prometheus
+    networks:
+      - tangyuanat_network
+    profiles:
+      - monitoring
+
+volumes:
+  tangyuanat_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  tangyuanat_network:
+    driver: bridge

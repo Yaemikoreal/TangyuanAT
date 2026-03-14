@@ -13,10 +13,10 @@ import threading
 import time
 
 # 导入数据库模型
-from models import db, Agent, WorkLog, ChatHistory, StatRecord, Config, init_db
+from models import db, Agent, WorkLog, ChatHistory, StatRecord, Config, Alert, AlertRule, AlertNotification, init_db
 
 # 导入 OpenClaw 客户端
-from agents import get_client
+from agents import get_client, get_alert_manager, init_alert_manager
 
 app = Flask(__name__)
 
@@ -323,11 +323,24 @@ def stream():
                 # 尝试获取 OpenClaw 实时状态
                 status = openclaw.get_status()
                 
+                # 检查告警
+                alerts_data = []
+                try:
+                    alert_manager = get_alert_manager(db)
+                    for agent in agents:
+                        if agent.last_active:
+                            alert = alert_manager.check_agent_offline(agent.id, agent.last_active)
+                            if alert:
+                                alerts_data.append(alert.to_dict())
+                except Exception as e:
+                    pass  # 告警检查失败不影响主流程
+                
                 data = {
                     "type": "heartbeat",
                     "timestamp": datetime.now().isoformat(),
                     "agents": agents_data,
-                    "openclaw_status": "connected" if status.get('success') else "disconnected"
+                    "openclaw_status": "connected" if status.get('success') else "disconnected",
+                    "alerts": alerts_data
                 }
                 yield f"data: {json.dumps(data)}\n\n"
             except Exception as e:
@@ -369,6 +382,207 @@ def get_openclaw_sessions():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# ============ 告警 API ============
+
+@app.route('/api/alerts')
+def get_alerts():
+    """获取告警列表"""
+    try:
+        status = request.args.get('status')
+        agent_id = request.args.get('agent_id')
+        alert_type = request.args.get('alert_type')
+        limit = request.args.get('limit', 100, type=int)
+        
+        query = Alert.query
+        
+        if status:
+            query = query.filter_by(status=status)
+        if agent_id:
+            query = query.filter_by(agent_id=agent_id)
+        if alert_type:
+            query = query.filter_by(alert_type=alert_type)
+        
+        alerts = query.order_by(Alert.created_at.desc()).limit(limit).all()
+        
+        return jsonify({
+            "success": True,
+            "data": [a.to_dict() for a in alerts],
+            "count": len(alerts)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts/active')
+def get_active_alerts():
+    """获取活跃告警"""
+    try:
+        agent_id = request.args.get('agent_id')
+        limit = request.args.get('limit', 100, type=int)
+        
+        alert_manager = get_alert_manager(db)
+        alerts = alert_manager.get_active_alerts(agent_id=agent_id, limit=limit)
+        
+        return jsonify({
+            "success": True,
+            "data": [a.to_dict() for a in alerts],
+            "count": len(alerts)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts/<int:alert_id>')
+def get_alert(alert_id):
+    """获取单个告警详情"""
+    try:
+        alert = Alert.query.get(alert_id)
+        if alert:
+            return jsonify({
+                "success": True,
+                "data": alert.to_dict()
+            })
+        return jsonify({"success": False, "error": "Alert not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts/<int:alert_id>/acknowledge', methods=['POST'])
+def acknowledge_alert(alert_id):
+    """确认告警"""
+    try:
+        data = request.get_json() or {}
+        acknowledged_by = data.get('acknowledged_by', 'system')
+        
+        alert_manager = get_alert_manager(db)
+        alert = alert_manager.acknowledge_alert(alert_id, acknowledged_by)
+        
+        if alert:
+            return jsonify({
+                "success": True,
+                "data": alert.to_dict()
+            })
+        return jsonify({"success": False, "error": "Alert not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts/<int:alert_id>/resolve', methods=['POST'])
+def resolve_alert(alert_id):
+    """解决告警"""
+    try:
+        alert_manager = get_alert_manager(db)
+        alert = alert_manager.resolve_alert(alert_id)
+        
+        if alert:
+            return jsonify({
+                "success": True,
+                "data": alert.to_dict()
+            })
+        return jsonify({"success": False, "error": "Alert not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts', methods=['POST'])
+def create_alert():
+    """创建自定义告警"""
+    try:
+        data = request.get_json()
+        
+        alert_manager = get_alert_manager(db)
+        alert = alert_manager.create_custom_alert(
+            agent_id=data.get('agent_id'),
+            title=data.get('title'),
+            message=data.get('message'),
+            severity=data.get('severity', 'warning'),
+            details=data.get('details')
+        )
+        
+        return jsonify({
+            "success": True,
+            "data": alert.to_dict()
+        }), 201
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts/stats')
+def get_alert_stats():
+    """获取告警统计"""
+    try:
+        alert_manager = get_alert_manager(db)
+        stats = alert_manager.get_alert_stats()
+        
+        return jsonify({
+            "success": True,
+            "data": stats
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts/<int:alert_id>/notify', methods=['POST'])
+def send_alert_notification(alert_id):
+    """发送告警通知"""
+    try:
+        alert = Alert.query.get(alert_id)
+        if not alert:
+            return jsonify({"success": False, "error": "Alert not found"}), 404
+        
+        data = request.get_json() or {}
+        channel = data.get('channel', 'feishu')
+        
+        alert_manager = get_alert_manager(db)
+        
+        if channel == 'feishu':
+            webhook_url = data.get('webhook_url')
+            success = alert_manager.send_feishu_notification(alert, webhook_url)
+            
+            return jsonify({
+                "success": success,
+                "message": "飞书通知发送成功" if success else "飞书通知发送失败"
+            })
+        
+        return jsonify({"success": False, "error": f"不支持的通知渠道: {channel}"}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/alerts/history')
+def get_alert_history():
+    """获取告警历史"""
+    try:
+        agent_id = request.args.get('agent_id')
+        alert_type = request.args.get('alert_type')
+        status = request.args.get('status')
+        start_time = request.args.get('start_time')
+        end_time = request.args.get('end_time')
+        limit = request.args.get('limit', 100, type=int)
+        
+        # 解析时间
+        start_dt = datetime.fromisoformat(start_time) if start_time else None
+        end_dt = datetime.fromisoformat(end_time) if end_time else None
+        
+        alert_manager = get_alert_manager(db)
+        alerts = alert_manager.get_alert_history(
+            agent_id=agent_id,
+            alert_type=alert_type,
+            status=status,
+            start_time=start_dt,
+            end_time=end_dt,
+            limit=limit
+        )
+        
+        return jsonify({
+            "success": True,
+            "data": [a.to_dict() for a in alerts],
+            "count": len(alerts)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # ============ 启动 ============
 
 if __name__ == '__main__':
@@ -379,6 +593,10 @@ if __name__ == '__main__':
     print(f"Database: {DATABASE_PATH}")
     print("Agents: Xilian (昔涟) & Tangyuan (汤圆)")
     print("=" * 50)
+    
+    # 初始化告警管理器
+    init_alert_manager(app, db)
+    print("Alert Manager initialized")
     
     # 记录启动日志
     with app.app_context():

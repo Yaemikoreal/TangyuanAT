@@ -158,6 +158,129 @@ class Config(db.Model):
         }
 
 
+class Alert(db.Model):
+    """告警记录表"""
+    __tablename__ = 'alerts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    agent_id = db.Column(db.String(50), db.ForeignKey('agents.id'), nullable=False)
+    agent_name = db.Column(db.String(100))
+    alert_type = db.Column(db.String(50), nullable=False)  # offline, task_failed, response_slow, custom
+    severity = db.Column(db.String(20), default='warning')  # info, warning, error, critical
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text)
+    details = db.Column(db.Text)  # JSON 额外详情
+    status = db.Column(db.String(20), default='active')  # active, acknowledged, resolved
+    acknowledged_by = db.Column(db.String(100))
+    acknowledged_at = db.Column(db.DateTime)
+    resolved_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 关联
+    agent = db.relationship('Agent', backref=db.backref('alerts', lazy='dynamic'))
+    
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'agent_name': self.agent_name,
+            'alert_type': self.alert_type,
+            'severity': self.severity,
+            'title': self.title,
+            'message': self.message,
+            'details': json.loads(self.details) if self.details else {},
+            'status': self.status,
+            'acknowledged_by': self.acknowledged_by,
+            'acknowledged_at': self.acknowledged_at.isoformat() if self.acknowledged_at else None,
+            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    @staticmethod
+    def from_dict(data):
+        """从字典创建"""
+        return Alert(
+            agent_id=data.get('agent_id'),
+            agent_name=data.get('agent_name'),
+            alert_type=data.get('alert_type'),
+            severity=data.get('severity', 'warning'),
+            title=data.get('title'),
+            message=data.get('message'),
+            details=json.dumps(data.get('details', {})),
+            status=data.get('status', 'active')
+        )
+
+
+class AlertRule(db.Model):
+    """告警规则表"""
+    __tablename__ = 'alert_rules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.Text)
+    alert_type = db.Column(db.String(50), nullable=False)
+    condition_type = db.Column(db.String(50), nullable=False)  # threshold, duration, count
+    condition_value = db.Column(db.Float)  # 阈值（如分钟数、次数等）
+    severity = db.Column(db.String(20), default='warning')
+    enabled = db.Column(db.Boolean, default=True)
+    notify_feishu = db.Column(db.Boolean, default=True)
+    notify_frontend = db.Column(db.Boolean, default=True)
+    feishu_webhook = db.Column(db.String(500))  # 可覆盖全局 webhook
+    cooldown_minutes = db.Column(db.Integer, default=5)  # 冷却时间，避免重复告警
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'alert_type': self.alert_type,
+            'condition_type': self.condition_type,
+            'condition_value': self.condition_value,
+            'severity': self.severity,
+            'enabled': self.enabled,
+            'notify_feishu': self.notify_feishu,
+            'notify_frontend': self.notify_frontend,
+            'feishu_webhook': self.feishu_webhook,
+            'cooldown_minutes': self.cooldown_minutes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class AlertNotification(db.Model):
+    """告警通知记录表"""
+    __tablename__ = 'alert_notifications'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    alert_id = db.Column(db.Integer, db.ForeignKey('alerts.id'), nullable=False)
+    channel = db.Column(db.String(50), nullable=False)  # feishu, frontend, email, etc.
+    status = db.Column(db.String(20), default='pending')  # pending, sent, failed
+    error_message = db.Column(db.Text)
+    sent_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # 关联
+    alert = db.relationship('Alert', backref=db.backref('notifications', lazy='dynamic'))
+    
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            'id': self.id,
+            'alert_id': self.alert_id,
+            'channel': self.channel,
+            'status': self.status,
+            'error_message': self.error_message,
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
 def init_db(app):
     """初始化数据库"""
     db.init_app(app)

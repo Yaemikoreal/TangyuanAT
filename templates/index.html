@@ -390,6 +390,8 @@
             Object.entries(agents).forEach(([id, agent]) => {
                 const card = document.createElement('div');
                 card.className = 'agent-card';
+                card.style.cursor = 'pointer';
+                card.onclick = () => window.location.href = `/agent_detail?id=${id}`;
                 card.innerHTML = `
                     <div class="agent-header">
                         <div class="agent-avatar">${agent.emoji}</div>

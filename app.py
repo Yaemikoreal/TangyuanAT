@@ -44,6 +44,12 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/agent_detail')
+def agent_detail():
+    """Agent 详情页"""
+    return render_template('agent_detail.html')
+
+
 # ============ Agent API ============
 
 @app.route('/api/agents')
@@ -262,6 +268,82 @@ def get_stats():
         }
         
         return jsonify({"success": True, "data": stats})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/stats/response-time')
+def get_response_time_stats():
+    """获取响应时间统计数据"""
+    try:
+        from datetime import timedelta
+        import random
+        
+        # 生成最近24小时的时间标签
+        now = datetime.utcnow()
+        labels = []
+        for i in range(23, -1, -1):
+            time = now - timedelta(hours=i)
+            labels.append(f"{time.hour}:00")
+        
+        # 模拟数据 (实际项目中应该从数据库或监控系统获取)
+        # TODO: 实现真实的响应时间数据收集
+        data = {
+            "labels": labels,
+            "xilian": [random.randint(100, 500) for _ in range(24)],
+            "tangyuan": [random.randint(150, 600) for _ in range(24)],
+            "doufu": [random.randint(80, 400) for _ in range(24)]
+        }
+        
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/stats/export')
+def export_stats():
+    """导出统计报表"""
+    try:
+        import csv
+        import io
+        
+        format_type = request.args.get('format', 'csv')
+        
+        # 获取统计数据
+        agents = Agent.query.all()
+        logs = WorkLog.query.order_by(WorkLog.timestamp.desc()).limit(1000).all()
+        
+        if format_type == 'json':
+            data = {
+                "agents": [a.to_dict() for a in agents],
+                "logs": [l.to_dict() for l in logs],
+                "exported_at": datetime.now().isoformat()
+            }
+            return jsonify(data)
+        
+        # CSV 格式
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # 写入表头
+        writer.writerow(['Agent', '状态', '完成任务', '处理消息', '最后活跃'])
+        
+        # 写入数据
+        for agent in agents:
+            writer.writerow([
+                agent.name,
+                agent.status,
+                agent.tasks_completed,
+                agent.messages_processed,
+                agent.last_active.isoformat() if agent.last_active else ''
+            ])
+        
+        output.seek(0)
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename=tangyuanat_report_{datetime.now().strftime("%Y%m%d")}.csv'}
+        )
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

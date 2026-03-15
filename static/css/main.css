@@ -422,8 +422,8 @@ body {
 }
 
 /* ========== 任务列表 ========== */
-.task-list {
-  margin-top: var(--space-4);
+.task-section {
+  margin-top: var(--space-5);
   padding-top: var(--space-4);
   border-top: 1px solid var(--border-default);
 }
@@ -438,6 +438,19 @@ body {
   gap: var(--space-2);
 }
 
+.task-list-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.task-loading, .task-empty {
+  text-align: center;
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
 .task-item {
   display: flex;
   align-items: center;
@@ -446,10 +459,15 @@ body {
   background: rgba(15, 23, 42, 0.5);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-2);
+  transition: background var(--transition-fast);
 }
 
 .task-item:last-child {
   margin-bottom: 0;
+}
+
+.task-item:hover {
+  background: rgba(15, 23, 42, 0.8);
 }
 
 .task-status {
@@ -459,14 +477,25 @@ body {
   flex-shrink: 0;
 }
 
-.task-status.pending { background: var(--status-warning); }
-.task-status.in-progress { background: var(--status-busy); }
+.task-status.pending { background: var(--status-idle); }
+.task-status.in-progress { background: var(--status-busy); animation: pulse 2s infinite; }
 .task-status.completed { background: var(--status-online); }
+.task-status.error { background: var(--status-offline); }
 
 .task-name {
   flex: 1;
   font-size: var(--text-sm);
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-time {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
 }
 
 .task-deadline {

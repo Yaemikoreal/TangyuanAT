@@ -285,9 +285,60 @@
                             ${agent.skills.length > 4 ? `<span class="skill-tag">+${agent.skills.length - 4}</span>` : ''}
                         </div>
                     ` : ''}
+                    <!-- 任务列表 -->
+                    <div class="task-section" id="tasks-${id}">
+                        <div class="task-list-title">
+                            <span>📋</span> 最近任务
+                        </div>
+                        <div class="task-list-content" data-agent="${id}">
+                            <div class="task-loading">加载中...</div>
+                        </div>
+                    </div>
                 `;
                 container.appendChild(card);
             });
+            
+            // 加载每个 Agent 的任务列表
+            Object.keys(agents).forEach(agentId => {
+                loadAgentTasks(agentId);
+            });
+        }
+        
+        // ========== 加载 Agent 任务列表 ==========
+        async function loadAgentTasks(agentId) {
+            try {
+                const response = await fetch(`/api/logs?agent_id=${agentId}&per_page=5`);
+                const result = await response.json();
+                
+                const container = document.querySelector(`.task-list-content[data-agent="${agentId}"]`);
+                if (!container) return;
+                
+                if (result.success && result.data && result.data.length > 0) {
+                    container.innerHTML = result.data.map(log => `
+                        <div class="task-item">
+                            <span class="task-status ${getTaskStatusClass(log.action)}"></span>
+                            <span class="task-name">${log.action}</span>
+                            <span class="task-time">${formatRelativeTime(log.timestamp)}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="task-empty">暂无任务记录</div>';
+                }
+            } catch (error) {
+                console.error(`Failed to load tasks for ${agentId}:`, error);
+                const container = document.querySelector(`.task-list-content[data-agent="${agentId}"]`);
+                if (container) {
+                    container.innerHTML = '<div class="task-empty">加载失败</div>';
+                }
+            }
+        }
+        
+        // ========== 获取任务状态样式 ==========
+        function getTaskStatusClass(action) {
+            if (action.includes('完成') || action.includes('成功')) return 'completed';
+            if (action.includes('开始') || action.includes('进行')) return 'in-progress';
+            if (action.includes('失败') || action.includes('错误')) return 'error';
+            return 'pending';
         }
         
         // ========== 加载统计数据 ==========
